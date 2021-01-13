@@ -1,0 +1,155 @@
+#########################################################################################
+# MIT License                                                                           #
+#                                                                                       #
+# Copyright (c) 2021 SumBot team                                                        #
+#                                                                                       #
+# Permission is hereby granted, free of charge, to any person obtaining a copy          #
+# of this software and associated documentation files (the "Software"), to deal         #
+# in the Software without restriction, including without limitation the rights          #
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell             #
+# copies of the Software, and to permit persons to whom the Software is                 #
+# furnished to do so, subject to the following conditions:                              #
+#                                                                                       #
+# The above copyright notice and this permission notice shall be included in all        #
+# copies or substantial portions of the Software.                                       #
+#                                                                                       #
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR            #
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,              #
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE           #
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER                #
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,         #
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE         #
+# SOFTWARE.                                                                             #
+# © 2021 GitHub, Inc.                                                                   #
+#########################################################################################
+
+import discord
+from discord.ext import commands, tasks
+import os
+import json
+from datetime import datetime
+import pyfiglet
+from prettytable import PrettyTable
+from Lib.help.help_SumBot import help_command
+import asyncio
+
+
+with open('./config.json', 'r') as f:
+    config = json.load(f)
+
+EXTENSIONS = [
+    "general",
+    "fun",
+    "giveaway",
+    "moderator",
+    "TopGG",
+    "music",
+]
+
+
+class sumbot(commands.Bot):
+    def __init__(self):
+        # intents = discord.Intents.default()
+        # intents.members = True
+        super().__init__(
+            command_prefix=config["prefix"],
+            case_insensitive=True,
+            allowed_mentions=discord.AllowedMentions(
+                everyone=config["mention"]["everyone"],
+                users=config["mention"]["users"],
+                roles=config["mention"]["roles"]),
+            help_command=help_command(),
+            intents=discord.Intents.all()
+)
+        self.client_id = config["client_id"]
+        self.owner_id = config["owner_id"]
+
+
+#        self.remove_command('help')
+
+        if config["token"] == "" or config["token"] == "token":
+            self.token = os.environ['token']
+        else:
+            self.token = config["token"]
+
+        for filename in EXTENSIONS:
+            try:
+                self.load_extension(f'cogs.{filename}')
+                print('lode {}'.format(filename))
+            except:
+                print('error in {}'.format(filename))
+
+    @tasks.loop(seconds=10.0)
+    async def change_stats(self):
+
+        status = [
+            '{0}help | sumbot.tk'.format(self.command_prefix),
+            '{} Servers'.format(len(self.guilds))
+            ]
+        await self.change_presence(activity=discord.Game(type=discord.ActivityType.listening, name=(status[0])))
+        await asyncio.sleep(30)
+        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=status[1]))
+        await asyncio.sleep(10)
+
+    async def on_ready(self):
+        self.change_stats.start()
+        tap = PrettyTable(
+            ['Name Bot', 'Tag', 'Id', 'prefix', 'guilds', 'commands', 'users'])
+        tap.add_row([ 
+            self.user.name,
+            '#' + self.user.discriminator,
+            self.user.id,
+            self.command_prefix,
+            len(self.guilds),
+            len(self.commands),
+            len(self.users)
+        ])
+        print(tap)
+        print(pyfiglet.figlet_format(self.user.name), end=" ")
+
+#        async for guild in self.fetch_guilds(limit=2):
+#            print(guild.name, end=" ,")
+
+    async def on_guild_join(self, guild):
+        channel = self.get_channel(config["channel"]["join"])
+        now = datetime.now()
+        try:
+            embed = discord.Embed(title="add guild", color=0x46FF00)
+
+            embed.add_field(name='name guild: ', value=guild.name, inline=False)
+            embed.add_field(name='id guild: ', value=guild.id, inline=False)
+            embed.add_field(name='owner guild: ', value='<@' + str(guild.owner_id) + ">", inline=False)
+            embed.add_field(name='owner id: ', value=str(guild.owner_id), inline=False)
+            embed.add_field(name='member guild: ', value=guild.member_count, inline=False)
+            embed.add_field(name='bot server: ', value=self.guilds, inline=False)
+            embed.set_footer(text=guild.name, icon_url=guild.icon_url)
+            embed.set_author(name=self.user.name, icon_url=self.user.avatar_url)
+            await channel.send(now.strftime("%d/%m/%Y, %H:%M"), embed=embed)
+        except:
+            print('error')
+
+    async def on_guild_remove(self, guild):
+        channel = self.get_channel(config['channel']["remove"])
+        now = datetime.now()
+        try:
+            embed = discord.Embed(title="remove guild", color=0xFF0000)
+
+            embed.add_field(name='name guild: ', value=guild.name, inline=False)
+            embed.add_field(name='id guild: ', value=guild.id, inline=False)
+            embed.add_field(name='owner guild: ', value='<@' + str(guild.owner_id) + ">", inline=False)
+            embed.add_field(name='owner id: ', value=str(guild.owner_id), inline=False)
+            embed.add_field(name='member guild: ', value=guild.member_count, inline=False)
+            embed.add_field(name='bot server: ', value=self.guilds, inline=False)
+            embed.set_footer(text=guild.name, icon_url=guild.icon_url)
+            embed.set_author(name=self.user.name, icon_url=self.user.avatar_url)
+            await channel.send(now.strftime("%d/%m/%Y, %H:%M"), embed=embed)
+        except:
+            print('error')
+
+    def run(self):
+        super().run(self.token, reconnect=True)
+
+
+if __name__ == '__main__':
+    client = sumbot()
+    client.run()
