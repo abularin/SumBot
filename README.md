@@ -36,3 +36,5 @@ Is the user getting the best experience in using robots on the Discord app.
 **For help and questions -> [Join the bot support server](https://discord.gg/WGEbtCuFbj)**
 
 **For Invite SumBot in your server -> [Invite SumBot](https://discord.com/oauth2/authorize?client_id=738120633430573176&scope=bot&permissions=8)**
+
+Copyright (c) 2021 SumBot team
