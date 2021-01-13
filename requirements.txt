@@ -1,0 +1,6 @@
+discord.py
+pillow
+pyfiglet
+asyncio
+prettytable
+arabic_reshaper
