@@ -1,0 +1,15 @@
+{
+    "token": "",
+    "prefix": "",
+    "client_id": 738120633430573176,
+    "owner_id": [740700552593145876, 716783245387235410],
+    "mention": {
+        "everyone": false,
+        "users": true,
+        "roles": false
+    },
+    "channel": {
+        "join": ,
+        "remove": 
+    }
+}
