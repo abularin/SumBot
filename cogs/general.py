@@ -26,13 +26,11 @@
 import discord
 from discord.ext import commands
 import time
-import arabic_reshaper
 from PIL import Image
 from io import BytesIO
 from PIL import ImageFont, ImageDraw
 import arabic_reshaper
-import asyncio
-from discord_webhook import DiscordWebhook, DiscordEmbed
+import sqlite3
 
 
 class General(commands.Cog):
@@ -41,6 +39,8 @@ class General(commands.Cog):
     """
     def __init__(self, client):
         self.client = client
+        self.db = sqlite3.connect('./app.db')
+        self.cr = self.db.cursor()
 
     @commands.command(aliases=['inv'], help='invite bot', description='To invite the bot in your server')
     @commands.guild_only()
@@ -63,7 +63,10 @@ class General(commands.Cog):
         if isinstance(ctx.channel, discord.channel.DMChannel):
             pass
         if isinstance(error, commands.CommandInvokeError):
-            await ctx.send("🙄 I don't have permissions `embed_links`")
+            await ctx.send(embed=discord.Embed(
+                description="🙄 I don't have permissions `embed_links`",
+                color=discord.Colour.red()
+            ))
 
     @commands.command(invoke_without_command=True, help='To know the connection speed of the bot on the server')
     @commands.guild_only()
@@ -71,22 +74,14 @@ class General(commands.Cog):
 
         before = time.monotonic()
 
-        embed = discord.Embed(
-            description='!pong',
-            timestamp=ctx.message.created_at,
-            color=ctx.author.color)
-        embed.set_footer(text=ctx.guild.name, icon_url=ctx.guild.icon_url)
-        embed.set_author(name=self.client.user.name, icon_url=self.client.user.avatar_url)
-        msg = await ctx.send(embed=embed)
+        msg = await ctx.send("pong!!")
         ping = (time.monotonic() - before) * 1000
         embed = discord.Embed(
             description='''Time taken: `{} ms`
 Discord API: `{} ms`
             '''.format(int(ping), round(self.client.latency * 1000)),
             timestamp=ctx.message.created_at,
-            color=ctx.author.color)
-        embed.set_footer(text=ctx.guild.name, icon_url=ctx.guild.icon_url)
-        embed.set_author(name=self.client.user.name, icon_url=self.client.user.avatar_url)
+            color=discord.Colour.red())
         await msg.edit(content="pong!", embed=embed)
 
     @ping.error
@@ -156,44 +151,48 @@ Discord API: `{} ms`
 
     @length.error
     async def length_error(self, ctx, error):
+        prefix = self.cr.execute("SELECT prefix FROM guilds WHERE guild_id = ?", (ctx.guild.id,))
         if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send("error")
+            await ctx.send(embed=discord.Embed(
+                description='**Used:** `{}len <messgae>`\n**Type:** general'.format(prefix.fetchone()[0]),
+                color=discord.Colour.red()
+            ))
     
-    @commands.command(name='bag')
-    async def report(self, ctx):
-        # channel = self.client.get_channel(797576932249960498)
-        webhook = DiscordWebhook(
-            url='https://discord.com/api/webhooks/797588095780257802/l7rC9owUuIGQU2t-cJk5hxw-tj6aE3jc_aAcsVkrwBLFHzJT-v3K2pYg290NObwz9ARF',
-            username="bag")
-        questions = [
-            "Entr your name?",
-            "What is the problem that you suffer from?",
-            "When the problem occurred?"]
-        answers = []
-
-        def check(m):
-            return m.author == ctx.author and m.channel == ctx.channel 
-        for i in questions:
-            await ctx.send(i)
-            try:
-                msg = await self.client.wait_for('message', timeout=120.0, check=check)
-            except asyncio.TimeoutError:
-                await ctx.send('You didn\'t answer in time, please be quicker next time!')
-                return
-            else:
-                answers.append(msg.content)
-        embed = DiscordEmbed(
-            title='Bug',
-            description="`Description bug`: \n {}.\nTime bag:\n{}".format(answers[1], answers[2]),
-            url=f"https://discord.com/oauth2/authorize?client_id={self.client.user.id}&scope=bot&permissions=8",
-            # timestamp=ctx.message.created_at
-        )
-        embed.set_author(name=self.client.user, icon_url=self.client.user.avatar_url)
-        embed.set_footer(text=ctx.author, icon_url=ctx.author.avatar_url)
-        embed.set_thumbnail(url=ctx.author.avatar_url)
-        webhook.add_embed(embed)
-        response = webhook.execute()
-        # await channel.send(embed=embed)
+    # @commands.command(name='bag')
+    # async def report(self, ctx):
+    #     # channel = self.client.get_channel(797576932249960498)
+    #     webhook = DiscordWebhook(
+    #         url='https://discord.com/api/webhooks/797588095780257802/l7rC9owUuIGQU2t-cJk5hxw-tj6aE3jc_aAcsVkrwBLFHzJT-v3K2pYg290NObwz9ARF',
+    #         username="bag")
+    #     questions = [
+    #         "Entr your name?",
+    #         "What is the problem that you suffer from?",
+    #         "When the problem occurred?"]
+    #     answers = []
+    #
+    #     def check(m):
+    #         return m.author == ctx.author and m.channel == ctx.channel
+    #     for i in questions:
+    #         await ctx.send(i)
+    #         try:
+    #             msg = await self.client.wait_for('message', timeout=120.0, check=check)
+    #         except asyncio.TimeoutError:
+    #             await ctx.send('You didn\'t answer in time, please be quicker next time!')
+    #             return
+    #         else:
+    #             answers.append(msg.content)
+    #     embed = DiscordEmbed(
+    #         title='Bug',
+    #         description="`Description bug`: \n {}.\nTime bag:\n{}".format(answers[1], answers[2]),
+    #         url=f"https://discord.com/oauth2/authorize?client_id={self.client.user.id}&scope=bot&permissions=8",
+    #         # timestamp=ctx.message.created_at
+    #     )
+    #     embed.set_author(name=self.client.user, icon_url=self.client.user.avatar_url)
+    #     embed.set_footer(text=ctx.author, icon_url=ctx.author.avatar_url)
+    #     embed.set_thumbnail(url=ctx.author.avatar_url)
+    #     webhook.add_embed(embed)
+    #     response = webhook.execute()
+    #     # await channel.send(embed=embed)
 
     @commands.command(aliases=['bot'], help='show bot info')
     @commands.guild_only()
@@ -240,7 +239,7 @@ Discord API: `{} ms`
         if isinstance(ctx.channel, discord.channel.DMChannel):
             pass
 
-    @commands.command(aliases=['s'], pass_context=True, help='show server info')
+    @commands.command(pass_context=True, help='show server info')
     @commands.guild_only()
     async def server(self, ctx):
         guild = ctx.guild
@@ -344,6 +343,16 @@ Discord API: `{} ms`
 
         await ctx.send(embed=embed)
 
+    @user.error
+    async def user_error(self, ctx, error):
+        if isinstance(error, commands.MemberNotFound):
+            await ctx.send(embed=discord.Embed(
+                description="🙄 I could not find this member",
+                color=discord.Colour.red()
+            ))
+        elif isinstance(ctx.channel, discord.channel.DMChannel):
+            pass
+
     @commands.command(help='show the profile')
     @commands.guild_only()
     @commands.cooldown(1, 10, commands.BucketType.user)
@@ -423,14 +432,14 @@ Discord API: `{} ms`
 
     @profile.error
     async def profile_error(self, ctx, error):
-
         if isinstance(error, commands.errors.MemberNotFound):
-            await ctx.send('🙄 I could not find this member')
+            await ctx.send(embed=discord.Embed(
+                description="🙄 I could not find this member",
+                color=discord.Colour.red()
+            ))
 
         elif isinstance(ctx.channel, discord.channel.DMChannel):
             pass
-        else:
-            await ctx.send(error)
 
 
 def setup(client):

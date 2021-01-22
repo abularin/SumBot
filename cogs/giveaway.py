@@ -27,7 +27,7 @@ import discord
 from discord.ext import commands
 import random
 import asyncio
-
+import sqlite3
 
 class Giveaway(commands.Cog):
     """
@@ -35,6 +35,8 @@ class Giveaway(commands.Cog):
     """
     def __init__(self, client):
         self.client = client
+        self.db = sqlite3.connect("./app.db")
+        self.cr = self.db.cursor()
 
     @commands.command(name='gcreate', help='to made giveaway advanced settings')
     @commands.guild_only()
@@ -49,11 +51,17 @@ class Giveaway(commands.Cog):
         def check(m):
             return m.author == ctx.author and m.channel == ctx.channel 
         for i in questions:
-            await ctx.send(i)
+            await ctx.send(embed=discord.Embed(
+                description=i,
+                color=discord.Colour.red()
+            ))
             try:
                 msg = await self.client.wait_for('message', timeout=120.0, check=check)
             except asyncio.TimeoutError:
-                await ctx.send('You didn\'t answer in time, please be quicker next time!')
+                await ctx.send(embed=discord.Embed(
+                    description='You didn\'t answer in time, please be quicker next time!',
+                    color=discord.Colour.red()
+            ))
                 return
             else:
                 answers.append(msg.content)
@@ -61,7 +69,10 @@ class Giveaway(commands.Cog):
 
             c_id = int(answers[0][2:-1])
         except:
-            await ctx.send(f"You didn't mention a channel properly. Do it like this {ctx.channel.mention} next time.")
+            await ctx.send(embed=discord.Embed(
+                description=f"You didn't mention a channel properly. Do it like this {ctx.channel.mention} next time.",
+                color=discord.Colour.red()
+            ))
             return
         channel = self.client.get_channel(c_id)
 
@@ -82,14 +93,23 @@ class Giveaway(commands.Cog):
 
         time = convert(answers[1])
         if time == -1:
-            await ctx.send(f"You didn't answer the time with a proper unit. Use (s|m|h|d|mo) next time!")
+            await ctx.send(embed=discord.Embed(
+                description=f"You didn't answer the time with a proper unit. Use (s|m|h|d|mo) next time!",
+                color=discord.Colour.red()
+            ))
             return
         elif time == -2:
-            await ctx.send(f"The time must be an integer. Please enter an integer next time")
+            await ctx.send(embed=discord.Embed(
+                description=f"The time must be an integer. Please enter an integer next time",
+                color=discord.Colour.red()
+            ))
             return            
         prize = answers[2]
 
-        await ctx.send(f"The Giveaway will be in {channel.mention} and will last {answers[1]}!")
+        await ctx.send(embed=discord.Embed(
+                description=f"The Giveaway will be in {channel.mention} and will last {answers[1]}!",
+                color=discord.Colour.green()
+            ))
 
         embed = discord.Embed(
             color=ctx.author.color,
@@ -115,16 +135,25 @@ class Giveaway(commands.Cog):
         embed.set_footer(text=ctx.guild.name, icon_url=ctx.guild.icon_url)
         embed.set_author(name=self.client.user.name, icon_url=self.client.user.avatar_url)
         await my_msg.edit(embed=embed)
-        await channel.send(f"the winner is {winner.mention} Won in **{prize}**!")
+        await channel.send(embed=discord.Embed(
+                description=f"the winner is {winner.mention} Won in **{prize}**!",
+                color=discord.Colour.red()
+            ))
 
     @commands.has_permissions(administrator=True)
     @giveaway_create.error
     async def giveaway_error(self, ctx, error):    
         print(error)  
         if isinstance(error, commands.CommandInvokeError):
-            await ctx.send("🙄 I don't have permissions")
+            await ctx.send(embed=discord.Embed(
+                description="🙄 I don't have permissions",
+                color=discord.Colour.red()
+            ))
         if isinstance(error, commands.MissingPermissions):
-            await ctx.send("🙄 You don't have permissions")
+            await ctx.send(embed=discord.Embed(
+                description="🙄 You don't have permissions",
+                color=discord.Colour.red()
+            ))
         if isinstance(ctx.channel, discord.channel.DMChannel):
             pass
 
@@ -136,20 +165,33 @@ class Giveaway(commands.Cog):
             new_msg = await channel.fetch_message(message_id)
 
         except:
-            await ctx.send("The id was entered incorrectly.")
+            await ctx.send(embed=discord.Embed(
+                description="The id was entered incorrectly.",
+                color=discord.Colour.red()
+            ))
             return
         users = await new_msg.reactions[0].users().flatten()
         users.pop(users.index(self.client.user))
         winner = random.choice(users)
-        await channel.send(f"the winner is {winner.mention}.!")
+        await channel.send(embed=discord.Embed(
+                description=f"the winner is {winner.mention}.!",
+                color=discord.Colour.green()
+            ))
 
     @commands.has_permissions(administrator=True)
     @reroll.error
     async def roll_winner_error(self, ctx, error):
+        prefix = self.cr.execute("SELECT prefix FROM guilds WHERE guild_id = ?", (ctx.guild.id,))
         if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send('Used: `{}reroll <#channel> id_message`'.format(self.client.command_prefix))
+            await ctx.send(embed=discord.Embed(
+                description='Used: `{}reroll <#channel> id_message`'.format(prefix.fetchone()[0]),
+                color=discord.Colour.red()
+            ))
         if isinstance(error, commands.MissingPermissions):
-            await ctx.send("🙄 You don't have permissions")
+            await ctx.send(embed=discord.Embed(
+                description="🙄 You don't have permissions",
+                color=discord.Colour.red()
+            ))
         if isinstance(ctx.channel, discord.channel.DMChannel):
             pass
 
@@ -160,9 +202,6 @@ class Giveaway(commands.Cog):
         await ctx.message.delete()
 
         def convert(time):
-            """
-            @type time: object
-            """
             pos = ["s", "m", "h", "d", "mo"]
             time_dict = {"s": 1, "m": 60, "h": 3600, "d": 3600*24, "mo": 86400*30}
             unit = time[-1]
@@ -200,23 +239,30 @@ class Giveaway(commands.Cog):
         embed.set_footer(text=ctx.guild.name, icon_url=ctx.guild.icon_url)
         embed.set_author(name=self.client.user.name, icon_url=self.client.user.avatar_url)
         await my_msg.edit(embed=embed)
-        await ctx.send(f"the winner is {winner.mention} won in **{prize}**!")
+        await ctx.send(embed=discord.Embed(
+                description=f"the winner is {winner.mention} won in **{prize}**!",
+                color=discord.Colour.green()
+            ))
 
     @commands.has_permissions(administrator=True)
     @giveaway_start.error
     async def giveaway_start_error(self, ctx, error):
+        prefix = self.cr.execute("SELECT prefix FROM guilds WHERE guild_id = ?", (ctx.guild.id,))
         if isinstance(error, commands.MissingRequiredArgument):
-            embed = discord.Embed(
-                description='**Used:** `{}gstart Time prize`\n**Type:** giveaway'.format(self.client.command_prefix),
-                color=ctx.author.color,
-                timestamp=ctx.message.created_at)
-            embed.set_author(name=self.client.user.display_name, icon_url=self.client.user.avatar_url)
-            embed.set_image(url='http://g.recordit.co/ziWu7QMEEU.gif')
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(
+                description='**Used:** `{}gstart Time prize`\n**Type:** giveaway'.format(prefix.fetchone()[0]),
+                color=discord.Colour.red()
+            ))
         if isinstance(error, commands.CommandInvokeError):
-            await ctx.send("🙄 I don't have permissions")
+            await ctx.send(embed=discord.Embed(
+                description="🙄 I don't have permissions",
+                color=discord.Colour.red()
+            ))
         if isinstance(error, commands.MissingPermissions):
-            await ctx.send("🙄 You don't have permissions")
+            await ctx.send(embed=discord.Embed(
+                description="🙄 You don't have permissions",
+                color=discord.Colour.red()
+            ))
         if isinstance(ctx.channel, discord.channel.DMChannel):
             pass
         

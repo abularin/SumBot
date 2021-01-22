@@ -27,129 +27,173 @@ import discord
 from discord.ext import commands, tasks
 import os
 import json
-from datetime import datetime
 import pyfiglet
 from prettytable import PrettyTable
-from Lib.help.help_SumBot import help_command
 import asyncio
+import sqlite3
 
 
 with open('./config.json', 'r') as f:
-    config = json.load(f)
+	config = json.load(f)
 
 EXTENSIONS = [
-    "general",
-    "fun",
-    "giveaway",
-    "moderator",
-    "TopGG",
-    "music",
+	"general",
+	"fun",
+	"giveaway",
+	"moderator",
+	"TopGG",
+	"music",
+	"owner",
+	"help"
 ]
 
 
+db = sqlite3.connect("app.db")
+cr = db.cursor()
+cr.execute(
+	"CREATE TABLE IF NOT EXISTS guilds(guild_id INTEGER PRIMARY KEY, prefix TEXT DEFAULT '@')")
+# cr.execute("CREATE TABLE IF NOT EXISTS welcome(guild_id INTEGER PRIMARY KEY, channel_id INTEGER DEFAULT defaultvalue)")
+
+
+def get_prefix(bot, message):
+	try:
+		prefix = cr.execute("SELECT prefix FROM guilds WHERE guild_id = ?", (message.guild.id,))
+		return commands.when_mentioned_or(prefix.fetchone()[0])(bot, message)
+	except:
+		cr.execute(
+			"INSERT OR IGNORE INTO guilds(guild_id, prefix) VALUES(?, ?)", (message.guild.id, "@"))
+		db.commit()
+
+
+# def get_welcome(bot, message):
+# 	welcome_channel = cr.execute("SELECT channel_id FROM welcome WHERE guild_id = ?", (message.guild.id,))
+# 	return welcome_channel.fetchone()[0]
+
+
 class sumbot(commands.Bot):
-    def __init__(self):
-        # intents = discord.Intents.default()
-        # intents.members = True
-        super().__init__(
-            command_prefix=config["prefix"],
-            case_insensitive=True,
-            allowed_mentions=discord.AllowedMentions(
-                everyone=config["mention"]["everyone"],
-                users=config["mention"]["users"],
-                roles=config["mention"]["roles"]),
-            help_command=help_command(),
-            intents=discord.Intents.all()
-)
-        self.client_id = config["client_id"]
-        self.owner_id = config["owner_id"]
+	def __init__(self):
+		# intents = discord.Intents.default()
+		# intents.members = True
+		super().__init__(
+			command_prefix=get_prefix,
+			case_insensitive=True,
+			allowed_mentions=discord.AllowedMentions(
+				everyone=config["mention"]["everyone"],
+				users=config["mention"]["users"],
+				roles=config["mention"]["roles"]),
+			# help_command=help_command(),
+			# intents=discord.Intents.all()
+		)
+		owner = self.get_user(self.owner_id)
+		self.owner_id = None
+		self.owner_ids = config["owner_ids"]
+		self.client_id = config["client_id"]
+		self.db = db
+		self.cr = cr
+		self.remove_command('help')
 
+		if config["token"] == "" or config["token"] == "token":
+			self.token = os.environ['token']
+		else:
+			self.token = config["token"]
 
-#        self.remove_command('help')
+		for filename in EXTENSIONS:
+			try:
+				self.load_extension(f'cogs.{filename}')
+				print('lode {}'.format(filename))
+			except Exception as error:
+				print('error in {}\n{}'.format(filename, error))
 
-        if config["token"] == "" or config["token"] == "token":
-            self.token = os.environ['token']
-        else:
-            self.token = config["token"]
+	@tasks.loop(seconds=10.0)
+	async def change_stats(self):
 
-        for filename in EXTENSIONS:
-            try:
-                self.load_extension(f'cogs.{filename}')
-                print('lode {}'.format(filename))
-            except:
-                print('error in {}'.format(filename))
+		status = [
+			'@help',
+			'Mention me to know my prefix',
+			'You can add custom prefix'
+		]
+		await self.change_presence(activity=discord.Game(type=discord.ActivityType.listening, name=(status[0])))
+		await asyncio.sleep(30)
+		await self.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=status[1]))
+		await asyncio.sleep(10)
+		await self.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=status[2]))
+		await asyncio.sleep(10)
 
-    @tasks.loop(seconds=10.0)
-    async def change_stats(self):
+	@tasks.loop(seconds=60)
+	async def add_server(self):
+		for i in self.guilds:
+			self.cr.execute(
+				"INSERT OR IGNORE INTO guilds(guild_id, prefix) VALUES(?, ?)", (i.id, "@"))
+			self.db.commit()
 
-        status = [
-            '{0}help | sumbot.tk'.format(self.command_prefix),
-            '{} Servers'.format(len(self.guilds))
-            ]
-        await self.change_presence(activity=discord.Game(type=discord.ActivityType.listening, name=(status[0])))
-        await asyncio.sleep(30)
-        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=status[1]))
-        await asyncio.sleep(10)
+	async def on_ready(self):
+		self.change_stats.start()
+		for i in self.guilds:
+			self.cr.execute(
+				"INSERT OR IGNORE INTO guilds(guild_id, prefix) VALUES(?, ?)", (i.id, "@"))
+			self.db.commit()
+		# self.add_server.start()
+		tap = PrettyTable(
+			['Name Bot', 'Tag', 'Id', 'prefix', 'guilds', 'commands', 'users'])
+		tap.add_row([
+			self.user.name,
+			'#' + self.user.discriminator,
+			self.user.id,
+			"@",
+			len(self.guilds),
+			len(self.commands),
+			len(self.users)
+		])
+		print(tap)
+		print(pyfiglet.figlet_format(self.user.name), end=" ")
 
-    async def on_ready(self):
-        self.change_stats.start()
-        tap = PrettyTable(
-            ['Name Bot', 'Tag', 'Id', 'prefix', 'guilds', 'commands', 'users'])
-        tap.add_row([ 
-            self.user.name,
-            '#' + self.user.discriminator,
-            self.user.id,
-            self.command_prefix,
-            len(self.guilds),
-            len(self.commands),
-            len(self.users)
-        ])
-        print(tap)
-        print(pyfiglet.figlet_format(self.user.name), end=" ")
+	#        async for guild in self.fetch_guilds(limit=2):
+	#            print(guild.name, end=" ,")
 
-#        async for guild in self.fetch_guilds(limit=2):
-#            print(guild.name, end=" ,")
+	async def on_guild_join(self, guild):
+		self.cr.execute(
+			"INSERT OR IGNORE INTO guilds(guild_id, prefix) VALUES(?, ?)", (guild.id, "@"))
+		self.db.commit()
+		channel = self.get_channel(config["channel"]["join"])
+		try:
+			embed = discord.Embed(title="add guild", color=0x46FF00)
 
-    async def on_guild_join(self, guild):
-        channel = self.get_channel(config["channel"]["join"])
-        now = datetime.now()
-        try:
-            embed = discord.Embed(title="add guild", color=0x46FF00)
+			embed.add_field(name='name guild: ', value=guild.name, inline=False)
+			embed.add_field(name='id guild: ', value=guild.id, inline=False)
+			embed.add_field(name='owner guild: ', value='<@' + str(guild.owner_id) + ">", inline=False)
+			embed.add_field(name='owner id: ', value=str(guild.owner_id), inline=False)
+			embed.add_field(name='member guild: ', value=guild.member_count, inline=False)
+			embed.add_field(name='bot server: ', value=f'{len(self.guilds)}', inline=False)
+			embed.set_footer(text=guild.name, icon_url=guild.icon_url)
+			embed.set_author(name=self.user.name, icon_url=self.user.avatar_url)
+			await channel.send(embed=embed)
+		except:
+			print('error')
 
-            embed.add_field(name='name guild: ', value=guild.name, inline=False)
-            embed.add_field(name='id guild: ', value=guild.id, inline=False)
-            embed.add_field(name='owner guild: ', value='<@' + str(guild.owner_id) + ">", inline=False)
-            embed.add_field(name='owner id: ', value=str(guild.owner_id), inline=False)
-            embed.add_field(name='member guild: ', value=guild.member_count, inline=False)
-            embed.add_field(name='bot server: ', value=self.guilds, inline=False)
-            embed.set_footer(text=guild.name, icon_url=guild.icon_url)
-            embed.set_author(name=self.user.name, icon_url=self.user.avatar_url)
-            await channel.send(now.strftime("%d/%m/%Y, %H:%M"), embed=embed)
-        except:
-            print('error')
+	async def on_guild_remove(self, guild):
+		self.cr.execute(
+			"INSERT OR IGNORE INTO guilds(guild_id, prefix) VALUES(?, ?)", (guild.id, "@"))
+		self.db.commit()
+		channel = self.get_channel(config['channel']["remove"])
+		try:
+			embed = discord.Embed(title="remove guild", color=0xFF0000)
 
-    async def on_guild_remove(self, guild):
-        channel = self.get_channel(config['channel']["remove"])
-        now = datetime.now()
-        try:
-            embed = discord.Embed(title="remove guild", color=0xFF0000)
+			embed.add_field(name='name guild: ', value=guild.name, inline=False)
+			embed.add_field(name='id guild: ', value=guild.id, inline=False)
+			embed.add_field(name='owner guild: ', value='<@' + str(guild.owner_id) + ">", inline=False)
+			embed.add_field(name='owner id: ', value=str(guild.owner_id), inline=False)
+			embed.add_field(name='member guild: ', value=guild.member_count, inline=False)
+			embed.add_field(name='bot server: ', value=f"{len(self.guilds)}", inline=False)
+			embed.set_footer(text=guild.name, icon_url=guild.icon_url)
+			embed.set_author(name=self.user.name, icon_url=self.user.avatar_url)
+			await channel.send(embed=embed)
+		except Exception as r:
+			print(r)
 
-            embed.add_field(name='name guild: ', value=guild.name, inline=False)
-            embed.add_field(name='id guild: ', value=guild.id, inline=False)
-            embed.add_field(name='owner guild: ', value='<@' + str(guild.owner_id) + ">", inline=False)
-            embed.add_field(name='owner id: ', value=str(guild.owner_id), inline=False)
-            embed.add_field(name='member guild: ', value=guild.member_count, inline=False)
-            embed.add_field(name='bot server: ', value=self.guilds, inline=False)
-            embed.set_footer(text=guild.name, icon_url=guild.icon_url)
-            embed.set_author(name=self.user.name, icon_url=self.user.avatar_url)
-            await channel.send(now.strftime("%d/%m/%Y, %H:%M"), embed=embed)
-        except:
-            print('error')
-
-    def run(self):
-        super().run(self.token, reconnect=True)
+	def run(self):
+		super().run(self.token, reconnect=True)
 
 
 if __name__ == '__main__':
-    client = sumbot()
-    client.run()
+	client = sumbot()
+	client.run()
